@@ -8,6 +8,7 @@
 // an AI exam-cheating scandal; India posts a record 720/9d in the Wellington
 // Test. No network, fully deterministic: the same bytes are written on
 // every run.
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -16,6 +17,18 @@ const target = join(outDir, "entry.png");
 const source = new URL("./entry.png", import.meta.url);
 
 const bytes = readFileSync(source);
+
+// Guard: the entry must be a genuine 1024x1024 PNG. A PNG's IHDR chunk
+// starts at byte 16 (width, big-endian uint32) and byte 20 (height).
+if (bytes.length < 33 || !bytes.subarray(1, 4).equals(Buffer.from("PNG"))) {
+  throw new Error("entry.png is not a PNG file");
+}
+const width = bytes.readUInt32BE(16);
+const height = bytes.readUInt32BE(20);
+if (width !== 1024 || height !== 1024) {
+  throw new Error(`entry.png must be 1024x1024, got ${width}x${height}`);
+}
+
 mkdirSync(outDir, { recursive: true });
 copyFileSync(source, target);
 
@@ -25,3 +38,7 @@ if (written.length !== bytes.length || !written.equals(bytes)) {
   // the grader runs the program twice and both runs must agree.
   throw new Error("entry.png mismatch after copy");
 }
+
+console.log(
+  `wrote ${target} (${written.length} bytes, sha256 ${createHash("sha256").update(written).digest("hex")})`,
+);
